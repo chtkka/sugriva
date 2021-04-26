@@ -1,13 +1,9 @@
 import discord
-intents = discord.Intents.default()
-intents.members = True
 from discord.ext import commands
 from discord.ext import tasks
 import sqlite3
 import random
 import asyncio
-
-client = discord.Client(intents=intents)
 
 
 
@@ -19,6 +15,7 @@ class Currency(commands.Cog):
         self.bot=bot
         self.conn=sqlite3.connect('bananas.db', detect_types=sqlite3.PARSE_DECLTYPES)
         self.c=self.conn.cursor()
+        self.grow.start()
         
     ####check user balance through sql query####
     def check_balance(self,user_id):
@@ -93,31 +90,36 @@ class Currency(commands.Cog):
     ####pooling and harvest commands####
 
     ####check for amounts of trees for each member row####
-    def check_trees(self,ctx,member):  
-        self.c.execute("SELECT tree1 tree2 tree3 FROM banana WHERE UID = ?",[member.id])
+    def check_trees(self,member):
+        self.c.execute("SELECT tree1, tree2, tree3 FROM bananas WHERE UID = ?",[member.id])
         tree_data = self.c.fetchone()
         return tree_data
 
     ####update pool column for each member (maybe use dictionary or object for values)####  
-    def add_to_pool(self,ctx,tree_data,member): 
+    def add_to_pool(self,tree_data,member): 
 
-        pool_amount = tree_data.tree1 * self.TREE_1_VAL + tree_data.tree2 * self.TREE_2_VAL + tree_data.tree3 *  self.TREE_3_VAL
-        self.c.execute("UPDATE banana SET pool = pool + ? WHERE UID = ?",[pool_amount,member.id])
+        pool_amount = tree_data[0] * self.TREE_1_VAL + tree_data[1] * self.TREE_2_VAL + tree_data[2] *  self.TREE_3_VAL
+        self.c.execute("UPDATE bananas SET pool = pool + ? WHERE UID = ?",[pool_amount,member.id])
+        print(f'Added {pool_amount} bananas')
+        self.conn.commit()
 
     ####add to pool every 60m####
-    @tasks.loop(minutes=60.0)
-    async def grow(self,ctx):
-        user_list = client.users
-        for i in user_list:
-            tree_data = Currency.check_trees(self,ctx,discord.Member)
-            Currency.add_to_pool(self,ctx,tree_data,discord.Member)
+    @tasks.loop(seconds=10.0)
+    async def grow(self):
+        user_list = self.bot.get_all_members()
+        for user in user_list:
+            tree_data = Currency.check_trees(self,user)
+            Currency.add_to_pool(self,tree_data,user)
 
     ####harvest command broadcast harvest amount + update balance(may phase out broadcast later)####
     @bananas.command()        
     async def harvest(self,ctx):
-        self.c.execute("UPDATE banana SET balance = balance + ? WHERE UID = ?",[ctx.author.id])
-        harvest_amount = self.c.execute("SELECT pool FROM banana WHERE UID = ?",[ctx.author.id])
-        ctx.send(f"{ctx.author.mention} harvested {harvest_amount} bananas")
+        self.c.execute("SELECT pool FROM bananas WHERE UID = ?",[ctx.author.id])
+        harvest_amount = self.c.fetchone()[0]
+        self.c.execute("UPDATE bananas SET balance = balance + ? WHERE UID = ?",[harvest_amount,ctx.author.id])
+        self.c.execute("UPDATE bananas SET pool = 0 WHERE UID = ?",[ctx.author.id])
+        self.conn.commit()
+        await ctx.send(f"{ctx.author.mention} harvested {harvest_amount} bananas")
 
 def setup(bot):
     bot.add_cog(Currency(bot))
