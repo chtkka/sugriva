@@ -1,10 +1,20 @@
 import discord
+intents = discord.Intents.default()
+intents.members = True
 from discord.ext import commands
+from discord.ext import tasks
 import sqlite3
 import random
 import asyncio
 
+client = discord.Client(intents=intents)
+
+
+
 class Currency(commands.Cog):
+    TREE_1_VAL = 10
+    TREE_2_VAL = 25
+    TREE_3_VAL = 45  
     def __init__(self,bot):
         self.bot=bot
         self.conn=sqlite3.connect('bananas.db', detect_types=sqlite3.PARSE_DECLTYPES)
@@ -78,7 +88,36 @@ class Currency(commands.Cog):
 
                 elif response_message.content.startswith('$accept'):
                     await ctx.send(f"{targeted_user.mention} accepted {ctx.author.mention}'s request for {amount}")
-                    self.send_balance(targeted_user.id,ctx.author.id,amount) 
+                    self.send_balance(targeted_user.id,ctx.author.id,amount)
+
+    ####pooling and harvest commands####
+
+    ####check for amounts of trees for each member row####
+    def check_trees(self,ctx,member):  
+        self.c.execute("SELECT tree1 tree2 tree3 FROM banana WHERE UID = ?",[member.id])
+        tree_data = self.c.fetchone()
+        return tree_data
+
+    ####update pool column for each member (maybe use dictionary or object for values)####  
+    def add_to_pool(self,ctx,tree_data,member): 
+
+        pool_amount = tree_data.tree1 * self.TREE_1_VAL + tree_data.tree2 * self.TREE_2_VAL + tree_data.tree3 *  self.TREE_3_VAL
+        self.c.execute("UPDATE banana SET pool = pool + ? WHERE UID = ?",[pool_amount,member.id])
+
+    ####add to pool every 60m####
+    @tasks.loop(minutes=60.0)
+    async def grow(self,ctx):
+        user_list = client.users
+        for i in user_list:
+            tree_data = Currency.check_trees(self,ctx,discord.Member)
+            Currency.add_to_pool(self,ctx,tree_data,discord.Member)
+
+    ####harvest command broadcast harvest amount + update balance(may phase out broadcast later)####
+    @bananas.Command()        
+    async def harvest(self,ctx):
+        self.c.execute("UPDATE banana SET balance = balance + ? WHERE UID = ?",[ctx.author.id])
+        harvest_amount = self.c.execute("SELECT pool FROM banana WHERE UID = ?",[ctx.author.id])
+        ctx.send(f"{ctx.author.mention} harvested {harvest_amount} bananas")
 
 def setup(bot):
     bot.add_cog(Currency(bot))
