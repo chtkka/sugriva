@@ -113,7 +113,7 @@ class Currency(commands.Cog):
             Currency.add_to_pool(self,ctx,tree_data,discord.Member)
 
     ####harvest command broadcast harvest amount + update balance(may phase out broadcast later)####
-    @bananas.Command()        
+    @bananas.command()        
     async def harvest(self,ctx):
         self.c.execute("UPDATE banana SET balance = balance + ? WHERE UID = ?",[ctx.author.id])
         harvest_amount = self.c.execute("SELECT pool FROM banana WHERE UID = ?",[ctx.author.id])
