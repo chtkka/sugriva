@@ -104,7 +104,7 @@ class Currency(commands.Cog):
         self.conn.commit()
 
     ####add to pool every 60m####
-    @tasks.loop(seconds=10.0)
+    @tasks.loop(minutes=60.0)
     async def grow(self):
         user_list = self.bot.get_all_members()
         for user in user_list:
